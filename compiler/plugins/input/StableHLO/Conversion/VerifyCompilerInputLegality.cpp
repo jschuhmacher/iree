@@ -8,6 +8,7 @@
 #include "compiler/plugins/input/StableHLO/Conversion/Passes.h"
 #include "mlir/Dialect/Shape/IR/Shape.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "stablehlo/dialect/ChloOps.h"
 #include "stablehlo/dialect/StablehloOps.h"
@@ -36,6 +37,44 @@ struct VerifyCompilerStableHloInputLegality final
     conversionTarget.addIllegalDialect<mlir::vhlo::VhloDialect>();
     conversionTarget.addIllegalDialect<mlir::shape::ShapeDialect>();
 
+    // Ops are not the only way an input dialect escapes: a type left in a
+    // signature reaches the runtime ABI.
+    auto isInputDialectType = [](Type type) {
+      // `Type::getDialect` and `Attribute::getDialect` both return a
+      // reference, which `isa` takes directly.
+      if (isa<mlir::stablehlo::StablehloDialect, mlir::chlo::ChloDialect,
+              mlir::vhlo::VhloDialect>(type.getDialect())) {
+        return true;
+      }
+      auto tensorType = dyn_cast<RankedTensorType>(type);
+      Attribute encoding = tensorType ? tensorType.getEncoding() : nullptr;
+      return encoding &&
+             isa<mlir::stablehlo::StablehloDialect, mlir::chlo::ChloDialect,
+                 mlir::vhlo::VhloDialect>(encoding.getDialect());
+    };
+
+    conversionTarget.markUnknownOpDynamicallyLegal([&](Operation *op) {
+      auto isLegal = [&](Type type) { return !isInputDialectType(type); };
+      if (!llvm::all_of(op->getOperandTypes(), isLegal) ||
+          !llvm::all_of(op->getResultTypes(), isLegal)) {
+        return false;
+      }
+      if (auto funcOp = dyn_cast<FunctionOpInterface>(op)) {
+        if (!llvm::all_of(funcOp.getArgumentTypes(), isLegal) ||
+            !llvm::all_of(funcOp.getResultTypes(), isLegal)) {
+          return false;
+        }
+      }
+      for (Region &region : op->getRegions()) {
+        for (Block &block : region) {
+          if (!llvm::all_of(block.getArgumentTypes(), isLegal)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    });
+
     // NOTE: It is not fully illegal to tunnel input dialect ops through to
     // backends that expect them. When such situations arise, the container
     // op should be marked recursively legal here.
@@ -55,7 +94,8 @@ struct VerifyCompilerStableHloInputLegality final
     // Error fall-through. Attach all reported issues as notes.
     InFlightDiagnostic errorDiag =
         emitError(getOperation().getLoc())
-        << "one or more illegal operations were found in the compiler input "
+        << "one or more illegal operations or types were found in the "
+           "compiler input "
            "(are you missing an --iree-input-type= flag, or did you mean to "
            "pre-process through an IREE importer frontend?)";
     for (Diagnostic &failureDiag : failures) {
