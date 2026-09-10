@@ -18,6 +18,7 @@ iree_lit_test_suite(
     "canonicalize_dynamism.mlir"
     "convert_collectives.mlir"
     "convert_collectives_variadic.mlir"
+    "drop_bounds_encoding.mlir"
     "legalize_chlo_decomposition.mlir"
     "legalize_chlo_no_broadcast.mlir"
     "legalize_chlo_with_broadcast.mlir"
