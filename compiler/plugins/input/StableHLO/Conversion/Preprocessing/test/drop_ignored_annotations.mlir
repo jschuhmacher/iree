@@ -89,3 +89,14 @@ func.func @result_accuracy_default(%arg0: tensor<4xf32>) -> tensor<4xf32> {
   } : (tensor<4xf32>) -> tensor<4xf32>
   return %0 : tensor<4xf32>
 }
+
+// -----
+
+// CHECK-LABEL: @bounds_in_signature
+// CHECK-SAME: (%[[ARG0:.+]]: tensor<?xf32>) -> tensor<?xf32>
+// CHECK: stablehlo.abs %[[ARG0]] : tensor<?xf32>
+func.func @bounds_in_signature(%arg0: tensor<?xf32, #stablehlo.bounds<8>>)
+    -> tensor<?xf32, #stablehlo.bounds<8>> {
+  %0 = stablehlo.abs %arg0 : tensor<?xf32, #stablehlo.bounds<8>>
+  return %0 : tensor<?xf32, #stablehlo.bounds<8>>
+}
