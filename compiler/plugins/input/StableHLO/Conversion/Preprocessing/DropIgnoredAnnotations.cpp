@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Drops the StableHLO annotations IREE has no representation for, so that a
-// request IREE cannot meet is reported .
+// request IREE cannot meet is reported.
 
 #include "compiler/plugins/input/StableHLO/Conversion/Preprocessing/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
