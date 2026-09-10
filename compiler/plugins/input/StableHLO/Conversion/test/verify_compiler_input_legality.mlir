@@ -44,3 +44,21 @@ func.func @illegal_token_type(%arg0: !stablehlo.token) -> !stablehlo.token {
   return %arg0 : !stablehlo.token
 }
 }
+
+// -----
+// expected-error@+1 {{one or more illegal operations or types were found in the compiler input}}
+module {
+// expected-note@+1 {{failed to legalize operation 'func.func' that was explicitly marked illegal}}
+func.func @illegal_shape_type(%arg0: !shape.witness) -> !shape.witness {
+  return %arg0 : !shape.witness
+}
+}
+
+// -----
+// expected-error@+1 {{one or more illegal operations or types were found in the compiler input}}
+module {
+// expected-note@+1 {{failed to legalize operation 'func.func' that was explicitly marked illegal}}
+func.func @illegal_element_type(%arg0: tensor<4x!stablehlo.token>) -> tensor<4x!stablehlo.token> {
+  return %arg0 : tensor<4x!stablehlo.token>
+}
+}

@@ -39,18 +39,22 @@ struct VerifyCompilerStableHloInputLegality final
 
     // Ops are not the only way an input dialect escapes: a type left in a
     // signature reaches the runtime ABI.
-    auto isInputDialectType = [](Type type) {
-      // `Type::getDialect` and `Attribute::getDialect` both return a
-      // reference, which `isa` takes directly.
-      if (isa<mlir::stablehlo::StablehloDialect, mlir::chlo::ChloDialect,
-              mlir::vhlo::VhloDialect>(type.getDialect())) {
+    auto isInputDialect = [](Dialect &dialect) {
+      return isa<mlir::stablehlo::StablehloDialect, mlir::chlo::ChloDialect,
+                 mlir::vhlo::VhloDialect, mlir::shape::ShapeDialect>(dialect);
+    };
+    auto isInputDialectType = [&](Type type) {
+      if (isInputDialect(type.getDialect())) {
         return true;
+      }
+      if (auto shapedType = dyn_cast<ShapedType>(type)) {
+        if (isInputDialect(shapedType.getElementType().getDialect())) {
+          return true;
+        }
       }
       auto tensorType = dyn_cast<RankedTensorType>(type);
       Attribute encoding = tensorType ? tensorType.getEncoding() : nullptr;
-      return encoding &&
-             isa<mlir::stablehlo::StablehloDialect, mlir::chlo::ChloDialect,
-                 mlir::vhlo::VhloDialect>(encoding.getDialect());
+      return encoding && isInputDialect(encoding.getDialect());
     };
 
     conversionTarget.markUnknownOpDynamicallyLegal([&](Operation *op) {
