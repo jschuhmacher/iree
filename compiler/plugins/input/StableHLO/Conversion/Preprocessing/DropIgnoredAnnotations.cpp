@@ -52,8 +52,10 @@ void dropAccuracyHints(Operation *op) {
 struct DropIgnoredAnnotations final
     : impl::DropIgnoredAnnotationsBase<DropIgnoredAnnotations> {
   void runOnOperation() override {
+    // getLoadedDialect can return null and make the equality below match
+    // every unregistered op; force the dialect loaded instead.
     Dialect *stablehloDialect =
-        getContext().getLoadedDialect<mlir::stablehlo::StablehloDialect>();
+        getContext().getOrLoadDialect<mlir::stablehlo::StablehloDialect>();
 
     getOperation().walk([&](Operation *op) {
       if (op->getDialect() == stablehloDialect) {

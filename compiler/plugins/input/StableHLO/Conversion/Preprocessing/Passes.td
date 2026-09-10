@@ -28,6 +28,11 @@ def DotGeneralToDot :
   let summary = "Lowers general dot to a non-batched dot when possible";
 }
 
+def DropIgnoredAnnotations :
+    Pass<"iree-stablehlo-preprocessing-drop-ignored-annotations", "func::FuncOp"> {
+  let summary = "Drops StableHLO annotations IREE does not honour";
+}
+
 def EinsumToDotGeneral :
     InterfacePass<"iree-stablehlo-preprocessing-einsum-to-dot-general", "mlir::FunctionOpInterface"> {
   let summary = "Legalizes einsum ops to general dot ops";
@@ -56,11 +61,6 @@ def LowerComplex :
 def UnfuseBatchNorm :
     InterfacePass<"iree-stablehlo-preprocessing-unfuse-batch-norm", "mlir::FunctionOpInterface"> {
   let summary = "Materializes 'broadcast_dimensions' attributes";
-}
-
-def DropIgnoredAnnotations :
-    Pass<"iree-stablehlo-preprocessing-drop-ignored-annotations", "func::FuncOp"> {
-  let summary = "Drops StableHLO annotations IREE does not honour";
 }
 
 #endif // IREE_COMPILER_PLUGINS_INPUT_STABLEHLO_CONVERSION_PREPROCESSING_PASSES
