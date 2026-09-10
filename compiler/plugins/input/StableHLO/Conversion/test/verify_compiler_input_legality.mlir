@@ -30,3 +30,17 @@ func.func @illegal_shape(%arg0: tensor<*xf32>) -> index {
   return %rank : index
 }
 }
+
+// -----
+// A type from an input dialect reaches the runtime ABI if it is not caught
+// here, so types are checked as well as operations.
+// RUN: not iree-opt --iree-stablehlo-verify-compiler-input-legality \
+// RUN:   -o /dev/null 2>&1 %s | FileCheck %s --check-prefix=TYPES
+// TYPES: one or more illegal operations or types were found in the compiler input
+// expected-error@+1 {{one or more illegal operations or types were found in the compiler input}}
+module {
+// expected-note@+1 {{failed to legalize operation 'func.func' that was explicitly marked illegal}}
+func.func @illegal_token_type(%arg0: !stablehlo.token) -> !stablehlo.token {
+  return %arg0 : !stablehlo.token
+}
+}
