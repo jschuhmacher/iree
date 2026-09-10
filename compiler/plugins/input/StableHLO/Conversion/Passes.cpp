@@ -58,6 +58,9 @@ void buildStableHLOInputConversionPassPipelineImpl(
       ::mlir::stablehlo::createStablehloLegalizeCompositeToCallPass(
           ::mlir::stablehlo::StablehloLegalizeCompositeToCallPassOptions{
               /*exceptListOption=*/{}}));
+  // Must run before DotGeneralToDot, which silently drops `algorithm` when
+  // rewriting a non-batched dot_general to stablehlo.dot.
+  passManager.addNestedPass<func::FuncOp>(createDropIgnoredAnnotations());
   passManager.addNestedPass<func::FuncOp>(
       ::mlir::stablehlo::createStablehloLegalizeQuantToMathPass());
   passManager.addNestedPass<func::FuncOp>(

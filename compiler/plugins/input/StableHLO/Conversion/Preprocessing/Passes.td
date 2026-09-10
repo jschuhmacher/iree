@@ -58,4 +58,9 @@ def UnfuseBatchNorm :
   let summary = "Materializes 'broadcast_dimensions' attributes";
 }
 
+def DropIgnoredAnnotations :
+    Pass<"iree-stablehlo-preprocessing-drop-ignored-annotations", "func::FuncOp"> {
+  let summary = "Drops StableHLO annotations IREE does not honour";
+}
+
 #endif // IREE_COMPILER_PLUGINS_INPUT_STABLEHLO_CONVERSION_PREPROCESSING_PASSES

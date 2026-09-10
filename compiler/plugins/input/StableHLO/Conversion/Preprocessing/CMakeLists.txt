@@ -51,6 +51,7 @@ iree_cc_library(
   SRCS
     "Canonicalization.cpp"
     "DotGeneralToDot.cpp"
+    "DropIgnoredAnnotations.cpp"
     "EinsumToDotGeneral.cpp"
     "FlattenTuplesInCFG.cpp"
     "FlattenTuplesInSCF.cpp"
