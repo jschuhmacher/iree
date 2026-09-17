@@ -306,15 +306,101 @@ struct DynamicGatherOpConversion final
   }
 };
 
+// An affine indexing map cannot branch on a runtime size, so when nothing
+// says whether an operand dim expands, gather each element.
+struct DynamicBroadcastInDimGatherConversion final
+    : OpConversionPattern<mlir::stablehlo::DynamicBroadcastInDimOp> {
+  using Base::Base;
+
+  LogicalResult
+  matchAndRewrite(mlir::stablehlo::DynamicBroadcastInDimOp op,
+                  OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    Value operand = adaptor.getOperand();
+    auto operandType = dyn_cast<RankedTensorType>(operand.getType());
+    auto resultType =
+        getTypeConverter()->convertType<RankedTensorType>(op.getType());
+    if (!operandType || !resultType) {
+      return rewriter.notifyMatchFailure(op, "unranked");
+    }
+
+    // Step in only when some operand dim is dynamic and unannotated; upstream
+    // handles the rest.
+    ArrayRef<int64_t> bcastDims = op.getBroadcastDimensions();
+    SmallVector<std::optional<bool>> expanding(operandType.getRank());
+    for (auto [idx, dim] : llvm::enumerate(operandType.getShape())) {
+      if (!ShapedType::isDynamic(dim)) {
+        expanding[idx] = (dim == 1);
+      }
+    }
+    if (auto known = op.getKnownExpandingDimensions()) {
+      for (int64_t i : *known) {
+        expanding[i] = true;
+      }
+    }
+    if (auto known = op.getKnownNonexpandingDimensions()) {
+      for (int64_t i : *known) {
+        expanding[i] = false;
+      }
+    }
+    if (llvm::all_of(expanding, [](auto v) { return v.has_value(); })) {
+      return rewriter.notifyMatchFailure(op, "expansion is decidable");
+    }
+
+    Value empty = mlir::stablehlo::getEmptyTensorFor(rewriter, loc, resultType,
+                                                     op, adaptor.getOperands());
+    int64_t resultRank = resultType.getRank();
+    Value zero = arith::ConstantIndexOp::create(rewriter, loc, 0);
+    Value one = arith::ConstantIndexOp::create(rewriter, loc, 1);
+
+    // Operand dim sizes, read once outside the loop nest.
+    SmallVector<Value> operandDims;
+    for (int64_t i = 0, e = operandType.getRank(); i < e; ++i) {
+      operandDims.push_back(
+          rewriter.createOrFold<tensor::DimOp>(loc, operand, i));
+    }
+
+    auto linalgOp = linalg::GenericOp::create(
+        rewriter, loc, /*resultTensorTypes=*/resultType,
+        /*inputs=*/ValueRange{}, /*outputs=*/empty,
+        SmallVector<AffineMap>{rewriter.getMultiDimIdentityMap(resultRank)},
+        mlir::stablehlo::getNParallelLoopsAttrs(resultRank),
+        [&](OpBuilder &b, Location nestedLoc, ValueRange) {
+          SmallVector<Value> index;
+          for (auto [operandDim, resultDim] : llvm::enumerate(bcastDims)) {
+            Value resultIndex =
+                linalg::IndexOp::create(b, nestedLoc, resultDim);
+            if (expanding[operandDim].has_value()) {
+              index.push_back(*expanding[operandDim] ? zero : resultIndex);
+              continue;
+            }
+            Value isOne =
+                arith::CmpIOp::create(b, nestedLoc, arith::CmpIPredicate::eq,
+                                      operandDims[operandDim], one);
+            index.push_back(arith::SelectOp::create(b, nestedLoc, isOne, zero,
+                                                    resultIndex));
+          }
+          Value element =
+              tensor::ExtractOp::create(b, nestedLoc, operand, index);
+          linalg::YieldOp::create(b, nestedLoc, element);
+        },
+        linalg::getPrunedAttributeList(op));
+    rewriter.replaceOp(op, linalgOp.getResults());
+    return success();
+  }
+};
+
 } // namespace
 
 void populateDynamicShapeConversionPatterns(MLIRContext *context,
                                             TypeConverter &typeConverter,
                                             RewritePatternSet *patterns) {
   // Higher benefit than the upstream patterns, which decline these forms.
-  patterns->add<DynamicReshapeOpConversion, DynamicPadOpConversion,
-                DynamicGatherOpConversion>(typeConverter, context,
-                                           PatternBenefit{1000});
+  patterns
+      ->add<DynamicReshapeOpConversion, DynamicPadOpConversion,
+            DynamicGatherOpConversion, DynamicBroadcastInDimGatherConversion>(
+          typeConverter, context, PatternBenefit{1000});
 }
 
 } // namespace mlir::iree_compiler::stablehlo
