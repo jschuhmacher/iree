@@ -191,3 +191,17 @@ func.func @dynamic_reduce_window_strided(%a: tensor<?xf32>, %i: tensor<f32>) -> 
   }) {window_dimensions = array<i64: 3>, window_strides = array<i64: 2>, padding = dense<[[1, 1]]> : tensor<1x2xi64>} : (tensor<?xf32>, tensor<f32>) -> tensor<?xf32>
   return %r : tensor<?xf32>
 }
+
+// -----
+
+// CHECK-LABEL: @scatter_batching_dynamic
+// CHECK: iree_linalg_ext.scatter
+// CHECK: return %{{.+}} : tensor<2x8xf32>
+func.func @scatter_batching_dynamic(%a: tensor<2x8xf32>, %i: tensor<2x?x1xi64>, %u: tensor<2x?xf32>) -> tensor<2x8xf32> {
+  %r = "stablehlo.scatter"(%a, %i, %u) ({
+  ^bb0(%x: tensor<f32>, %y: tensor<f32>):
+    %s = stablehlo.add %x, %y : tensor<f32>
+    "stablehlo.return"(%s) : (tensor<f32>) -> ()
+  }) {scatter_dimension_numbers = #stablehlo.scatter<update_window_dims = [], inserted_window_dims = [1], input_batching_dims = [0], scatter_indices_batching_dims = [0], scatter_dims_to_operand_dims = [1], index_vector_dim = 2>, indices_are_sorted = false, unique_indices = false} : (tensor<2x8xf32>, tensor<2x?x1xi64>, tensor<2x?xf32>) -> tensor<2x8xf32>
+  return %r : tensor<2x8xf32>
+}

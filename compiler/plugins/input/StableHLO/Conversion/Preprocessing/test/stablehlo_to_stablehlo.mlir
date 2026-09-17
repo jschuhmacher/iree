@@ -833,3 +833,25 @@ func.func @dynamic_conv_to_padded_conv(%a: tensor<1x8x8x1xf32>, %k: tensor<3x3x1
   } : (tensor<1x8x8x1xf32>, tensor<3x3x1x1xf32>, tensor<2x2xi64>) -> tensor<1x8x8x1xf32>
   return %r : tensor<1x8x8x1xf32>
 }
+
+// -----
+
+// CHECK-LABEL: @scatter_batching_dynamic_indices
+// CHECK-SAME: %[[IDX:[^:]+]]: tensor<2x?x1xi64>
+// CHECK: %[[N:.+]] = stablehlo.get_dimension_size %[[IDX]], dim = 1
+// CHECK: %[[SHAPE:.+]] = stablehlo.concatenate
+// CHECK: %[[IOTA:.+]] = stablehlo.dynamic_iota %[[SHAPE]], dim = 0 : (tensor<3xi64>) -> tensor<2x?x1xi64>
+// CHECK: %[[CAT:.+]] = stablehlo.concatenate %[[IOTA]], %[[IDX]], dim = 2 : (tensor<2x?x1xi64>, tensor<2x?x1xi64>) -> tensor<2x?x2xi64>
+// A pre-existing pattern then collapses the now-adjacent batch dims into one.
+// CHECK: stablehlo.scatter
+// CHECK-SAME: inserted_window_dims = [0, 1]
+// CHECK-SAME: scatter_dims_to_operand_dims = [0, 1]
+// CHECK-NOT: input_batching_dims = [0]
+func.func @scatter_batching_dynamic_indices(%a: tensor<2x8xf32>, %i: tensor<2x?x1xi64>, %u: tensor<2x?xf32>) -> tensor<2x8xf32> {
+  %r = "stablehlo.scatter"(%a, %i, %u) ({
+  ^bb0(%x: tensor<f32>, %y: tensor<f32>):
+    %s = stablehlo.add %x, %y : tensor<f32>
+    "stablehlo.return"(%s) : (tensor<f32>) -> ()
+  }) {scatter_dimension_numbers = #stablehlo.scatter<update_window_dims = [], inserted_window_dims = [1], input_batching_dims = [0], scatter_indices_batching_dims = [0], scatter_dims_to_operand_dims = [1], index_vector_dim = 2>, indices_are_sorted = false, unique_indices = false} : (tensor<2x8xf32>, tensor<2x?x1xi64>, tensor<2x?xf32>) -> tensor<2x8xf32>
+  return %r : tensor<2x8xf32>
+}
