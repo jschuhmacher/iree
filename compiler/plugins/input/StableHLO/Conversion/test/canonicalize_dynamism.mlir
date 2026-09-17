@@ -49,3 +49,23 @@ func.func @dynamic_conv_constant(%arg0: tensor<1x8x8x1xf32>,
   } : (tensor<1x8x8x1xf32>, tensor<3x3x1x1xf32>, tensor<2x2xi64>) -> tensor<1x6x6x1xf32>
   return %0 : tensor<1x6x6x1xf32>
 }
+
+// -----
+
+// The shape operand is a constant only after @shape is inlined.
+// CHECK-LABEL: @dynamic_pad_after_inline
+// CHECK-NOT: dynamic_pad
+// CHECK: return %{{.+}} : tensor<6xf32>
+func.func private @shape() -> tensor<1xi64> {
+  %c = stablehlo.constant dense<1> : tensor<1xi64>
+  return %c : tensor<1xi64>
+}
+func.func @dynamic_pad_after_inline(%arg0: tensor<4xf32>, %arg1: tensor<f32>) -> tensor<6xf32> {
+  %low = call @shape() : () -> tensor<1xi64>
+  %high = call @shape() : () -> tensor<1xi64>
+  %interior = stablehlo.constant dense<0> : tensor<1xi64>
+  %0 = "stablehlo.dynamic_pad"(%arg0, %arg1, %low, %high, %interior)
+    : (tensor<4xf32>, tensor<f32>, tensor<1xi64>, tensor<1xi64>, tensor<1xi64>)
+    -> tensor<6xf32>
+  return %0 : tensor<6xf32>
+}
