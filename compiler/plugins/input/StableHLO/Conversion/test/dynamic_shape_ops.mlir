@@ -12,6 +12,20 @@ func.func @dynamic_reshape(%a: tensor<4x2xf32>, %s: tensor<1xi64>) -> tensor<?xf
 
 // -----
 
+// CHECK-LABEL: @dynamic_conv_lhs_dilation
+// CHECK: linalg.conv_2d_nhwc_hwcf
+// CHECK: return %{{.+}} : tensor<1x5x5x1xf32>
+func.func @dynamic_conv_lhs_dilation(%a: tensor<1x4x4x1xf32>, %k: tensor<3x3x1x1xf32>, %p: tensor<2x2xi64>) -> tensor<1x5x5x1xf32> {
+  %r = "stablehlo.dynamic_conv"(%a, %k, %p) {
+    dimension_numbers = #stablehlo.conv<[b, 0, 1, f]x[0, 1, i, o]->[b, 0, 1, f]>,
+    feature_group_count = 1 : i64, batch_group_count = 1 : i64,
+    window_strides = array<i64: 1, 1>, lhs_dilation = array<i64: 2, 2>, rhs_dilation = array<i64: 1, 1>
+  } : (tensor<1x4x4x1xf32>, tensor<3x3x1x1xf32>, tensor<2x2xi64>) -> tensor<1x5x5x1xf32>
+  return %r : tensor<1x5x5x1xf32>
+}
+
+// -----
+
 // The padding amounts are runtime values.
 // CHECK-LABEL: @dynamic_pad
 // CHECK-SAME: (%[[ARG0:.+]]: tensor<4xf32>, %[[VAL:.+]]: tensor<f32>, %[[LO:.+]]: tensor<1xi64>, %[[HI:.+]]: tensor<1xi64>, %[[IN:.+]]: tensor<1xi64>)
@@ -50,4 +64,19 @@ func.func @dynamic_pad(%a: tensor<4xf32>, %v: tensor<f32>, %lo: tensor<1xi64>, %
 func.func @dynamic_pad_static_result(%a: tensor<2x3xf32>, %v: tensor<f32>, %lo: tensor<2xi64>, %hi: tensor<2xi64>, %in: tensor<2xi64>) -> tensor<5x9xf32> {
   %r = "stablehlo.dynamic_pad"(%a, %v, %lo, %hi, %in) : (tensor<2x3xf32>, tensor<f32>, tensor<2xi64>, tensor<2xi64>, tensor<2xi64>) -> tensor<5x9xf32>
   return %r : tensor<5x9xf32>
+}
+
+// -----
+
+// CHECK-LABEL: @dynamic_conv
+// CHECK: tensor.insert_slice
+// CHECK: linalg.conv_2d_nhwc_hwcf
+// CHECK: return %{{.+}} : tensor<1x8x8x1xf32>
+func.func @dynamic_conv(%a: tensor<1x8x8x1xf32>, %k: tensor<3x3x1x1xf32>, %p: tensor<2x2xi64>) -> tensor<1x8x8x1xf32> {
+  %r = "stablehlo.dynamic_conv"(%a, %k, %p) {
+    dimension_numbers = #stablehlo.conv<[b, 0, 1, f]x[0, 1, i, o]->[b, 0, 1, f]>,
+    feature_group_count = 1 : i64, batch_group_count = 1 : i64,
+    window_strides = array<i64: 1, 1>, lhs_dilation = array<i64: 1, 1>, rhs_dilation = array<i64: 1, 1>
+  } : (tensor<1x8x8x1xf32>, tensor<3x3x1x1xf32>, tensor<2x2xi64>) -> tensor<1x8x8x1xf32>
+  return %r : tensor<1x8x8x1xf32>
 }
