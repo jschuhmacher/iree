@@ -137,3 +137,57 @@ func.func @dynamic_broadcast_annotated(%a: tensor<?xf32>, %s: tensor<2xi32>) -> 
   %r = stablehlo.dynamic_broadcast_in_dim %a, %s, dims = [1] {known_nonexpanding_dimensions = array<i64: 0>} : (tensor<?xf32>, tensor<2xi32>) -> tensor<?x?xf32>
   return %r : tensor<?x?xf32>
 }
+
+// -----
+
+// CHECK-LABEL: @dynamic_reduce_window
+// CHECK-SAME: (%[[ARG0:.+]]: tensor<?x8xf32>, %[[INIT:.+]]: tensor<f32>)
+// CHECK: %[[DIM:.+]] = tensor.dim %[[ARG0]], %c0
+// CHECK: %[[EMPTY:.+]] = tensor.empty(%[[DIM]]) : tensor<?x4xf32>
+// CHECK: linalg.fill ins(%{{.+}} : f32) outs(%[[EMPTY]] : tensor<?x4xf32>)
+// CHECK: linalg.generic
+// CHECK: arith.maximumf
+// CHECK: return %{{.+}} : tensor<?x4xf32>
+func.func @dynamic_reduce_window(%a: tensor<?x8xf32>, %i: tensor<f32>) -> tensor<?x4xf32> {
+  %r = "stablehlo.reduce_window"(%a, %i) ({
+  ^bb0(%x: tensor<f32>, %y: tensor<f32>):
+    %m = stablehlo.maximum %x, %y : tensor<f32>
+    "stablehlo.return"(%m) : (tensor<f32>) -> ()
+  }) {window_dimensions = array<i64: 1, 2>, window_strides = array<i64: 1, 2>, padding = dense<0> : tensor<2x2xi64>} : (tensor<?x8xf32>, tensor<f32>) -> tensor<?x4xf32>
+  return %r : tensor<?x4xf32>
+}
+
+// -----
+
+// A pooling-shaped reduce_window with a dynamic batch dim: upstream's own
+// pattern seeds the dynamic output dim itself, so it applies here too.
+// CHECK-LABEL: @dynamic_reduce_window_pooling
+// CHECK-NOT: linalg.generic
+// CHECK: linalg.pooling_nhwc_max
+// CHECK: return %{{.+}} : tensor<?x4x4x3xf32>
+func.func @dynamic_reduce_window_pooling(%a: tensor<?x8x8x3xf32>, %i: tensor<f32>) -> tensor<?x4x4x3xf32> {
+  %r = "stablehlo.reduce_window"(%a, %i) ({
+  ^bb0(%x: tensor<f32>, %y: tensor<f32>):
+    %m = stablehlo.maximum %x, %y : tensor<f32>
+    "stablehlo.return"(%m) : (tensor<f32>) -> ()
+  }) {window_dimensions = array<i64: 1, 2, 2, 1>, window_strides = array<i64: 1, 2, 2, 1>, padding = dense<0> : tensor<4x2xi64>} : (tensor<?x8x8x3xf32>, tensor<f32>) -> tensor<?x4x4x3xf32>
+  return %r : tensor<?x4x4x3xf32>
+}
+
+// -----
+
+// A windowed dynamic dim: the result dim is computed from the input dim.
+// CHECK-LABEL: @dynamic_reduce_window_strided
+// CHECK: arith.subi
+// CHECK: arith.divsi
+// CHECK: arith.addi
+// CHECK: tensor.empty(%{{.+}}) : tensor<?xf32>
+// CHECK: linalg.generic
+func.func @dynamic_reduce_window_strided(%a: tensor<?xf32>, %i: tensor<f32>) -> tensor<?xf32> {
+  %r = "stablehlo.reduce_window"(%a, %i) ({
+  ^bb0(%x: tensor<f32>, %y: tensor<f32>):
+    %m = stablehlo.add %x, %y : tensor<f32>
+    "stablehlo.return"(%m) : (tensor<f32>) -> ()
+  }) {window_dimensions = array<i64: 3>, window_strides = array<i64: 2>, padding = dense<[[1, 1]]> : tensor<1x2xi64>} : (tensor<?xf32>, tensor<f32>) -> tensor<?xf32>
+  return %r : tensor<?xf32>
+}
