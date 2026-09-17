@@ -80,3 +80,32 @@ func.func @dynamic_conv(%a: tensor<1x8x8x1xf32>, %k: tensor<3x3x1x1xf32>, %p: te
   } : (tensor<1x8x8x1xf32>, tensor<3x3x1x1xf32>, tensor<2x2xi64>) -> tensor<1x8x8x1xf32>
   return %r : tensor<1x8x8x1xf32>
 }
+
+// -----
+
+// CHECK-LABEL: @dynamic_gather
+// CHECK: linalg.generic
+// CHECK: tensor.extract %{{.+}} : tensor<3x4x2xi32>
+// CHECK: return %{{.+}} : tensor<2x3x2x2xi32>
+func.func @dynamic_gather(%a: tensor<3x4x2xi32>, %i: tensor<2x3x2xi64>, %s: tensor<3xi64>) -> tensor<2x3x2x2xi32> {
+  %r = "stablehlo.dynamic_gather"(%a, %i, %s) {
+    dimension_numbers = #stablehlo.gather<offset_dims = [2, 3], collapsed_slice_dims = [0], start_index_map = [1, 0], index_vector_dim = 2>,
+    indices_are_sorted = false
+  } : (tensor<3x4x2xi32>, tensor<2x3x2xi64>, tensor<3xi64>) -> tensor<2x3x2x2xi32>
+  return %r : tensor<2x3x2x2xi32>
+}
+
+// -----
+
+// A dynamic result: the offset dims come from the slice_sizes operand.
+// CHECK-LABEL: @dynamic_gather_dynamic_result
+// CHECK: tensor.empty(%{{.+}}, %{{.+}}) : tensor<2x3x?x?xi32>
+// CHECK: linalg.generic
+// CHECK: return %{{.+}} : tensor<2x3x?x?xi32>
+func.func @dynamic_gather_dynamic_result(%a: tensor<3x4x2xi32>, %i: tensor<2x3x2xi64>, %s: tensor<3xi64>) -> tensor<2x3x?x?xi32> {
+  %r = "stablehlo.dynamic_gather"(%a, %i, %s) {
+    dimension_numbers = #stablehlo.gather<offset_dims = [2, 3], collapsed_slice_dims = [0], start_index_map = [1, 0], index_vector_dim = 2>,
+    indices_are_sorted = false
+  } : (tensor<3x4x2xi32>, tensor<2x3x2xi64>, tensor<3xi64>) -> tensor<2x3x?x?xi32>
+  return %r : tensor<2x3x?x?xi32>
+}
