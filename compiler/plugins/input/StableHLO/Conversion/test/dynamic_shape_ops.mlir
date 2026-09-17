@@ -109,3 +109,31 @@ func.func @dynamic_gather_dynamic_result(%a: tensor<3x4x2xi32>, %i: tensor<2x3x2
   } : (tensor<3x4x2xi32>, tensor<2x3x2xi64>, tensor<3xi64>) -> tensor<2x3x?x?xi32>
   return %r : tensor<2x3x?x?xi32>
 }
+
+// -----
+
+// No annotation and a dynamic operand dim: whether it expands is decided
+// per element at runtime.
+// CHECK-LABEL: @dynamic_broadcast_undecidable
+// CHECK: linalg.generic
+// CHECK: arith.cmpi eq
+// CHECK: arith.select
+// CHECK: tensor.extract %{{.+}} : tensor<?xf32>
+// CHECK: return %{{.+}} : tensor<?x?xf32>
+func.func @dynamic_broadcast_undecidable(%a: tensor<?xf32>, %s: tensor<2xi32>) -> tensor<?x?xf32> {
+  %r = stablehlo.dynamic_broadcast_in_dim %a, %s, dims = [1] : (tensor<?xf32>, tensor<2xi32>) -> tensor<?x?xf32>
+  return %r : tensor<?x?xf32>
+}
+
+// -----
+
+// The annotated form decides expansion statically, so upstream's own lowering applies.
+// CHECK-LABEL: @dynamic_broadcast_annotated
+// CHECK: linalg.generic
+// CHECK-NOT: arith.select
+// CHECK-NOT: tensor.extract
+// CHECK: return %{{.+}} : tensor<?x?xf32>
+func.func @dynamic_broadcast_annotated(%a: tensor<?xf32>, %s: tensor<2xi32>) -> tensor<?x?xf32> {
+  %r = stablehlo.dynamic_broadcast_in_dim %a, %s, dims = [1] {known_nonexpanding_dimensions = array<i64: 0>} : (tensor<?xf32>, tensor<2xi32>) -> tensor<?x?xf32>
+  return %r : tensor<?x?xf32>
+}
